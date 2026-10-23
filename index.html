@@ -5,39 +5,44 @@
   <meta charset="UTF-8">
   <meta name="viewport"
         content="width=device-width, initial-scale=1.0">
-  <title>Lector QR - Glorioso San Antón</title>
+
+  <title>Asistencia QR - Glorioso San Antón</title>
 
   <script src="https://unpkg.com/html5-qrcode@2.3.8/html5-qrcode.min.js"></script>
 
   <style>
     body {
       font-family: Arial, sans-serif;
-      background: #f0f4f8;
-      text-align: center;
-      padding: 20px;
+      background: #eef3f8;
       color: #17365d;
+      text-align: center;
+      padding: 15px;
     }
 
     .contenedor {
       max-width: 480px;
       margin: auto;
-      background: white;
       padding: 20px;
-      border-radius: 15px;
+      background: white;
+      border-radius: 16px;
       box-shadow: 0 3px 12px #0002;
     }
 
     h1 { font-size: 23px; }
 
     button {
-      padding: 14px;
-      margin: 8px 0;
       width: 100%;
+      padding: 15px;
+      margin: 7px 0;
       border: none;
       border-radius: 9px;
-      background: #1769aa;
-      color: white;
       font-size: 17px;
+      color: white;
+      background: #1769aa;
+    }
+
+    .seleccionado {
+      background: #18804a;
     }
 
     #reader {
@@ -46,97 +51,227 @@
     }
 
     #resultado {
+      padding: 16px;
       margin-top: 15px;
-      padding: 12px;
+      border-radius: 10px;
       background: #e8f3ff;
-      border-radius: 8px;
+      font-size: 19px;
       overflow-wrap: anywhere;
+    }
+
+    .exito {
+      background: #d7f5df !important;
+      color: #146334;
+    }
+
+    .aviso {
+      background: #fff1cb !important;
+      color: #755100;
+    }
+
+    .nota {
+      font-size: 13px;
+      color: #666;
     }
   </style>
 </head>
 
 <body>
-  <div class="contenedor">
-    <h1>I.E.S. Glorioso San Antón</h1>
-    <h2>Prueba de lector QR</h2>
 
-    <p>Presiona el botón para activar la cámara.</p>
+<div class="contenedor">
 
-    <button onclick="abrirCamara()">
-      ABRIR CÁMARA QR
-    </button>
+  <h1>I.E.S. Glorioso San Antón</h1>
+  <h2>Sistema de Asistencia QR</h2>
 
-    <button onclick="cerrarCamara()">
-      CERRAR CÁMARA
-    </button>
+  <p>Selecciona el modo de registro:</p>
 
-    <div id="reader"></div>
+  <button id="btnIngreso"
+          onclick="seleccionarModo('INGRESO')">
+    INGRESO
+  </button>
 
-    <div id="resultado">
-      Esperando lectura de código QR...
-    </div>
+  <button id="btnSalida"
+          onclick="seleccionarModo('SALIDA')">
+    SALIDA
+  </button>
+
+  <h3 id="modoActual">
+    Modo no seleccionado
+  </h3>
+
+  <button onclick="abrirCamara()">
+    ABRIR CÁMARA QR
+  </button>
+
+  <button onclick="cerrarCamara()">
+    CERRAR CÁMARA
+  </button>
+
+  <div id="reader"></div>
+
+  <div id="resultado">
+    Selecciona INGRESO o SALIDA.
   </div>
 
-  <script>
-    let lector = null;
-    let activo = false;
-    let iniciando = false;
+  <p class="nota">
+    MODO DE PRUEBA: todavía no guarda
+    asistencias en Google Sheets.
+  </p>
 
-    function mostrar(mensaje) {
-      document.getElementById("resultado").textContent = mensaje;
+</div>
+
+<script>
+  let modo = "";
+  let lector = null;
+  let activo = false;
+  let iniciando = false;
+
+  let ultimoCodigo = "";
+  let ultimaLectura = 0;
+
+  const ESPERA_MS = 4000;
+
+  function mostrar(mensaje, clase = "") {
+    const caja = document.getElementById("resultado");
+    caja.textContent = mensaje;
+    caja.className = clase;
+  }
+
+  function seleccionarModo(nuevoModo) {
+    if (activo || iniciando) {
+      mostrar(
+        "Cierra la cámara antes de cambiar el modo.",
+        "aviso"
+      );
+      return;
     }
 
-    async function abrirCamara() {
-      if (activo || iniciando) return;
+    modo = nuevoModo;
 
-      if (typeof Html5Qrcode === "undefined") {
-        mostrar("No se pudo cargar el lector QR. Comprueba internet.");
-        return;
-      }
+    document.getElementById("modoActual")
+      .textContent = "MODO: " + modo;
 
-      iniciando = true;
-      lector = new Html5Qrcode("reader");
+    document.getElementById("btnIngreso")
+      .classList.toggle(
+        "seleccionado", modo === "INGRESO"
+      );
 
-      try {
-        await lector.start(
-          { facingMode: "environment" },
-          {
-            fps: 10,
-            qrbox: { width: 220, height: 220 }
-          },
-          function(codigo) {
-            mostrar("Código leído: " + codigo);
-          },
-          function(error) {
-            // Seguimos buscando un QR.
-          }
-        );
+    document.getElementById("btnSalida")
+      .classList.toggle(
+        "seleccionado", modo === "SALIDA"
+      );
 
-        activo = true;
-        mostrar("Cámara activa. Acerca un código QR.");
-      } catch (error) {
-        mostrar("Error de cámara: " +
-          (error?.message || String(error)));
-        lector = null;
-      } finally {
-        iniciando = false;
-      }
+    ultimoCodigo = "";
+    ultimaLectura = 0;
+
+    mostrar("Modo " + modo + " seleccionado.");
+  }
+
+  function procesarQR(codigo) {
+    const ahora = Date.now();
+
+    // Evita lecturas repetidas inmediatas
+    // del mismo carné.
+    if (
+      codigo === ultimoCodigo &&
+      ahora - ultimaLectura < ESPERA_MS
+    ) {
+      return;
     }
 
-    async function cerrarCamara() {
-      if (!lector || !activo) return;
+    ultimoCodigo = codigo;
+    ultimaLectura = ahora;
 
-      try {
-        await lector.stop();
-        lector.clear();
-        activo = false;
-        lector = null;
-        mostrar("Cámara cerrada.");
-      } catch (error) {
-        mostrar("No se pudo cerrar la cámara: " +
-          (error?.message || String(error)));
-      }
+    // Solo aceptamos identificadores de prueba
+    // con el formato esperado.
+    if (!/^GSA-\d{4,}$/.test(codigo)) {
+      mostrar(
+        "QR no válido para esta prueba: " + codigo,
+        "aviso"
+      );
+      return;
     }
-  </script>
+
+    mostrar(
+      "QR LEÍDO CORRECTAMENTE\n" +
+      "Estudiante: " + codigo + "\n" +
+      "Modo: " + modo + "\n" +
+      "Listo para el siguiente estudiante.",
+      "exito"
+    );
+  }
+
+  async function abrirCamara() {
+    if (activo || iniciando) return;
+
+    if (!modo) {
+      mostrar(
+        "Primero selecciona INGRESO o SALIDA.",
+        "aviso"
+      );
+      return;
+    }
+
+    if (typeof Html5Qrcode === "undefined") {
+      mostrar("No se pudo cargar el lector QR.");
+      return;
+    }
+
+    iniciando = true;
+    lector = new Html5Qrcode("reader");
+
+    try {
+      await lector.start(
+        { facingMode: "environment" },
+        {
+          fps: 10,
+          qrbox: { width: 220, height: 220 }
+        },
+        procesarQR,
+        function(error) {
+          // Continúa buscando un QR.
+        }
+      );
+
+      activo = true;
+      mostrar(
+        "Cámara activa en modo " + modo +
+        ". Acerca un carné QR."
+      );
+
+    } catch (error) {
+      mostrar(
+        "Error de cámara: " +
+        (error?.message || String(error)),
+        "aviso"
+      );
+      lector = null;
+    } finally {
+      iniciando = false;
+    }
+  }
+
+  async function cerrarCamara() {
+    if (!lector || !activo) return;
+
+    try {
+      await lector.stop();
+      lector.clear();
+
+      activo = false;
+      lector = null;
+
+      mostrar("Cámara cerrada.");
+
+    } catch (error) {
+      mostrar(
+        "Error al cerrar: " +
+        (error?.message || String(error)),
+        "aviso"
+      );
+    }
+  }
+</script>
+
 </body>
 </html>
