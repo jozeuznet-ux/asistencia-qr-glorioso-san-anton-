@@ -1,0 +1,142 @@
+
+<!DOCTYPE html>
+<html lang="es">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport"
+        content="width=device-width, initial-scale=1.0">
+  <title>Lector QR - Glorioso San Antón</title>
+
+  <script src="https://unpkg.com/html5-qrcode@2.3.8/html5-qrcode.min.js"></script>
+
+  <style>
+    body {
+      font-family: Arial, sans-serif;
+      background: #f0f4f8;
+      text-align: center;
+      padding: 20px;
+      color: #17365d;
+    }
+
+    .contenedor {
+      max-width: 480px;
+      margin: auto;
+      background: white;
+      padding: 20px;
+      border-radius: 15px;
+      box-shadow: 0 3px 12px #0002;
+    }
+
+    h1 { font-size: 23px; }
+
+    button {
+      padding: 14px;
+      margin: 8px 0;
+      width: 100%;
+      border: none;
+      border-radius: 9px;
+      background: #1769aa;
+      color: white;
+      font-size: 17px;
+    }
+
+    #reader {
+      width: 100%;
+      margin-top: 15px;
+    }
+
+    #resultado {
+      margin-top: 15px;
+      padding: 12px;
+      background: #e8f3ff;
+      border-radius: 8px;
+      overflow-wrap: anywhere;
+    }
+  </style>
+</head>
+
+<body>
+  <div class="contenedor">
+    <h1>I.E.S. Glorioso San Antón</h1>
+    <h2>Prueba de lector QR</h2>
+
+    <p>Presiona el botón para activar la cámara.</p>
+
+    <button onclick="abrirCamara()">
+      ABRIR CÁMARA QR
+    </button>
+
+    <button onclick="cerrarCamara()">
+      CERRAR CÁMARA
+    </button>
+
+    <div id="reader"></div>
+
+    <div id="resultado">
+      Esperando lectura de código QR...
+    </div>
+  </div>
+
+  <script>
+    let lector = null;
+    let activo = false;
+    let iniciando = false;
+
+    function mostrar(mensaje) {
+      document.getElementById("resultado").textContent = mensaje;
+    }
+
+    async function abrirCamara() {
+      if (activo || iniciando) return;
+
+      if (typeof Html5Qrcode === "undefined") {
+        mostrar("No se pudo cargar el lector QR. Comprueba internet.");
+        return;
+      }
+
+      iniciando = true;
+      lector = new Html5Qrcode("reader");
+
+      try {
+        await lector.start(
+          { facingMode: "environment" },
+          {
+            fps: 10,
+            qrbox: { width: 220, height: 220 }
+          },
+          function(codigo) {
+            mostrar("Código leído: " + codigo);
+          },
+          function(error) {
+            // Seguimos buscando un QR.
+          }
+        );
+
+        activo = true;
+        mostrar("Cámara activa. Acerca un código QR.");
+      } catch (error) {
+        mostrar("Error de cámara: " +
+          (error?.message || String(error)));
+        lector = null;
+      } finally {
+        iniciando = false;
+      }
+    }
+
+    async function cerrarCamara() {
+      if (!lector || !activo) return;
+
+      try {
+        await lector.stop();
+        lector.clear();
+        activo = false;
+        lector = null;
+        mostrar("Cámara cerrada.");
+      } catch (error) {
+        mostrar("No se pudo cerrar la cámara: " +
+          (error?.message || String(error)));
+      }
+    }
+  </script>
+</body>
+</html>
